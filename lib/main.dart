@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Uygulamanın her zaman yatay kalmasını sağlar
+  // Uygulamayı donanım seviyesinde yatay modda kilitler
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
@@ -35,7 +35,6 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   bool isLazerActive = false; 
   bool isAnalyzing = false;
 
-  // Ayar setleri
   Map<String, double> nozzleSettings = {
     'exposure': 0.0,
     'thresh': 100.0,
@@ -59,13 +58,16 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   void initCamera() async {
     controller = CameraController(
       widget.cameras[0],
-      ResolutionPreset.max, // En yüksek çözünürlük analiz için kritik
+      ResolutionPreset.max,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.bgra8888,
     );
 
     try {
       await controller!.initialize();
+      // iPhone 13 sensör oryantasyonunu yatay arayüzle eşitler
+      await controller!.lockCaptureOrientation(DeviceOrientation.landscapeLeft);
+      
       await applyAllSettings();
 
       controller!.startImageStream((image) {
@@ -97,7 +99,6 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     }
   }
 
-  // PYTHON MANTIĞI: Ağırlıklı Kütle Merkezi Algoritması
   void analizEt(CameraImage image) {
     double weightedSumX = 0;
     double weightedSumY = 0;
@@ -108,14 +109,12 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     final int width = image.width;
     final int height = image.height;
 
-    // Performans için adım 4 idealdir, Python'daki gibi kütle merkezi hesaplar
     for (int y = 0; y < height; y += 4) { 
       for (int x = 0; x < width; x += 4) {
         int index = y * width + x;
         if (index < bytes.length) {
           int brightness = bytes[index];
           if (brightness >= currentThresh) {
-            // Parlaklık farkına göre ağırlık (Python Centroid mantığı)
             double weight = (brightness - currentThresh + 1).toDouble();
             weightedSumX += x * weight;
             weightedSumY += y * weight;
@@ -154,13 +153,15 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // iPhone 13 Yatay Mod Aranjmanı
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
-            // ÜST KISIM: İKİLİ PANEL (SOL CANLI - SAĞ REFERANS)
+            // EKRANIN %85'İ GÖRÜNTÜ ALANI (İKİLİ PANEL)
             Expanded(
+              flex: 8, 
               child: Row(
                 children: [
                   _buildWindow("CANLI AKIŞ: ${isLazerActive ? 'LAZER' : 'NOZZLE'}", 
@@ -195,36 +196,32 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
               ),
             ),
             
-            // ALT KONTROL PANELİ
-            Container(
-              height: 70,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              color: const Color(0xFF1A1A1A),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Mod Seçimi
-                  Row(
-                    children: [
-                      _modeBtn("NOZZLE MODU", !isLazerActive, Colors.blue, () {
-                        setState(() => isLazerActive = false);
-                        applyAllSettings();
-                      }),
-                      const SizedBox(width: 12),
-                      _modeBtn("LAZER MODU", isLazerActive, Colors.redAccent, () {
-                        setState(() => isLazerActive = true);
-                        applyAllSettings();
-                      }),
-                    ],
-                  ),
-                  // Aksiyon Butonu
-                  _actionBtn("REFERANS GÖRÜNTÜ AL", Colors.green, captureNozzle),
-                  // Ayarlar
-                  IconButton(
-                    icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 32),
-                    onPressed: _openSettings,
-                  ),
-                ],
+            // EKRANIN %15'İ KONTROL PANELİ
+            Expanded(
+              flex: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                color: const Color(0xFF1A1A1A),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _modeBtn("NOZZLE", !isLazerActive, Colors.blue, () {
+                      setState(() => isLazerActive = false);
+                      applyAllSettings();
+                    }),
+                    _modeBtn("LAZER", isLazerActive, Colors.redAccent, () {
+                      setState(() => isLazerActive = true);
+                      applyAllSettings();
+                    }),
+                    const VerticalDivider(color: Colors.white24, indent: 10, endIndent: 10),
+                    _actionBtn("REFERANS ÇEK", Colors.green, captureNozzle),
+                    const VerticalDivider(color: Colors.white24, indent: 10, endIndent: 10),
+                    IconButton(
+                      icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 30),
+                      onPressed: _openSettings,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -233,24 +230,28 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     );
   }
 
+  // Pencere tasarımında başlıkların yatayda okunabilirliği için paddingler ayarlandı
   Widget _buildWindow(String title, Widget child, Color color) {
     return Expanded(
       child: Container(
-        margin: const EdgeInsets.all(6),
+        margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Stack(
           children: [
-            ClipRRect(borderRadius: BorderRadius.circular(2), child: child),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: const BorderRadius.only(bottomRight: Radius.circular(8)),
+            ClipRRect(borderRadius: BorderRadius.circular(6), child: child),
+            Positioned(
+              top: 0, left: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: const BorderRadius.only(bottomRight: Radius.circular(8)),
+                ),
+                child: Text(title, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-              child: Text(title, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
             ),
           ],
         ),
@@ -258,37 +259,31 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     );
   }
 
+  // Butonlar yatay ekranın alt kısmına sığacak şekilde daraltıldı
   Widget _modeBtn(String txt, bool active, Color color, VoidCallback tap) {
     return SizedBox(
-      height: 45,
-      width: 120,
+      height: 40,
+      width: 100,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: active ? color : Colors.grey[900],
-          foregroundColor: Colors.white,
-          side: BorderSide(color: active ? Colors.white30 : Colors.transparent),
+          padding: EdgeInsets.zero,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          elevation: active ? 8 : 0,
         ),
         onPressed: tap,
-        child: Text(txt, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+        child: Text(txt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
       ),
     );
   }
 
   Widget _actionBtn(String txt, Color color, VoidCallback tap) {
     return SizedBox(
-      height: 45,
+      height: 40,
       child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+        style: ElevatedButton.styleFrom(backgroundColor: color, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
         onPressed: tap,
-        icon: const Icon(Icons.camera_alt_outlined, size: 20),
-        label: Text(txt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        icon: const Icon(Icons.camera_alt_outlined, size: 18),
+        label: Text(txt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
       ),
     );
   }
@@ -301,26 +296,23 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
           var s = isLazerActive ? lazerSettings : nozzleSettings;
           return AlertDialog(
             backgroundColor: const Color(0xFF1A1A1A),
-            title: Text("${isLazerActive ? 'LAZER' : 'NOZZLE'} PARAMETRELERİ", style: const TextStyle(fontSize: 16)),
+            title: Text("${isLazerActive ? 'LAZER' : 'NOZZLE'} AYARLARI", style: const TextStyle(fontSize: 14)),
             content: SizedBox(
-              width: 400,
+              width: 500, // Yatay ekranda diyalog genişletildi
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _slider(setDS, "POZLAMA (Exposure)", s['exposure']!, -10, 10, (v) => s['exposure'] = v),
-                    _slider(setDS, "ODAK (Focus)", s['focus']!, 0, 1, (v) => s['focus'] = v),
-                    _slider(setDS, "HASSASİYET (Threshold)", s['thresh']!, 0, 255, (v) => s['thresh'] = v),
+                    _slider(setDS, "POZLAMA", s['exposure']!, -10, 10, (v) => s['exposure'] = v),
+                    _slider(setDS, "ODAK", s['focus']!, 0, 1, (v) => s['focus'] = v),
+                    _slider(setDS, "EŞİK", s['thresh']!, 0, 255, (v) => s['thresh'] = v),
                     _slider(setDS, "ZOOM", s['zoom']!, 1, 10, (v) => s['zoom'] = v),
                   ],
                 ),
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () { applyAllSettings(); Navigator.pop(context); }, 
-                child: const Text("AYARLARI UYGULA", style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold))
-              ),
+              TextButton(onPressed: () { applyAllSettings(); Navigator.pop(context); }, child: const Text("UYGULA")),
             ],
           );
         },
@@ -329,27 +321,14 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   }
 
   Widget _slider(StateSetter setDS, String lbl, double val, double min, double max, Function(double) change) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(lbl, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-              Text(val.toStringAsFixed(1), style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          Slider(
-            value: val, 
-            min: min, 
-            max: max, 
-            activeColor: Colors.blueAccent,
-            onChanged: (v) => setDS(() => change(v))
-          ),
-        ],
-      ),
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [Text(lbl, style: const TextStyle(fontSize: 11)), Text(val.toStringAsFixed(1))],
+        ),
+        Slider(value: val, min: min, max: max, onChanged: (v) => setDS(() => change(v))),
+      ],
     );
   }
 }
@@ -362,19 +341,18 @@ class LazerMarkerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Kamera görüntüsü ve UI widget arasındaki oranlama (YATAY MOD İÇİN)
+    // IPHONE 13 LANDSCAPE FIX:
+    // previewSize dikey (height > width) gelir. Ekran yatay (size.width > size.height).
+    // Oranlamayı bu tersliğe göre yapıyoruz.
     final double scaleX = size.width / previewSize.height;
     final double scaleY = size.height / previewSize.width;
+    
     final Offset mappedPos = Offset(pos.dx * scaleX, pos.dy * scaleY);
 
     final paint = Paint()..color = color..strokeWidth = 2..style = PaintingStyle.stroke;
-    
-    // Crosshair (Artı işareti) tasarımı
     canvas.drawCircle(mappedPos, 15, paint);
     canvas.drawLine(Offset(mappedPos.dx - 30, mappedPos.dy), Offset(mappedPos.dx + 30, mappedPos.dy), paint);
     canvas.drawLine(Offset(mappedPos.dx, mappedPos.dy - 30), Offset(mappedPos.dx, mappedPos.dy + 30), paint);
-    
-    // Merkeze nokta
     canvas.drawCircle(mappedPos, 2, paint..style = PaintingStyle.fill);
   }
   @override

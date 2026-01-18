@@ -6,13 +6,14 @@ import 'dart:ui' as ui;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 1. ADIM: Sistemi zorla yatay moda kilitler (Saat ve pil simgeleri de döner)
+  // 1. ADIM: Sistemi sadece yatay modlara kilitliyoruz. 
+  // Dikey (Portrait) seçenekleri listeden çıkarıldı.
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
   
-  // Durum çubuğunu gizleyerek tam ekran deneyimi sağlar (iPhone çentiği için opsiyonel)
+  // Tam ekran deneyimi için durum çubuklarını (saat, pil) gizler
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   final cameras = await availableCameras();
@@ -68,7 +69,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
 
     try {
       await controller!.initialize();
-      // 2. ADIM: Kamera sensörünü yatay arayüzle kilitler (Görüntü dönmesini engeller)
+      // 2. ADIM: Kamera sensörünü yatay arayüzle kilitler
       await controller!.lockCaptureOrientation(DeviceOrientation.landscapeLeft);
       
       await applyAllSettings();
@@ -156,14 +157,13 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 3. ADIM: Yatay Modda Elemanların Yerleşimi
+    // 3. ADIM: Yatay Modda Elemanların Yerleşimi (Colum -> Row Yapısı)
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        // SafeArea çentiği otomatik yönetir
         child: Column(
           children: [
-            // ÜST BÖLÜM: %80 Kamera ve Referans alanı
+            // Görüntü alanı (Ekranın büyük kısmı)
             Expanded(
               flex: 8, 
               child: Row(
@@ -200,7 +200,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
               ),
             ),
             
-            // ALT BÖLÜM: %20 Kontrol Paneli (İnce şerit)
+            // Kontrol Paneli (Alt şerit)
             Expanded(
               flex: 2,
               child: Container(
@@ -239,6 +239,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
       child: Container(
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
+          // withValues güncellemesi yapıldı
           border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -301,7 +302,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
             backgroundColor: const Color(0xFF1A1A1A),
             title: Text("${isLazerActive ? 'LAZER' : 'NOZZLE'} AYARLARI", style: const TextStyle(fontSize: 14)),
             content: SizedBox(
-              width: 450, // Yatay ekranda genişliği artırıldı
+              width: 450, 
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -344,9 +345,7 @@ class LazerMarkerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // iPhone 13 Yatay Koordinat Dönüşümü:
-    // previewSize genelde [Height x Width] (Dikey) gelir. 
-    // Landscape modunda olduğumuz için bu oranları tersliyoruz.
+    // iPhone 13 Yatay Koordinat Dönüşümü
     final double scaleX = size.width / previewSize.height;
     final double scaleY = size.height / previewSize.width;
     

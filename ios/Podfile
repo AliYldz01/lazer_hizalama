@@ -1,9 +1,16 @@
-platform :ios, '13.0' # iPhone 13 için en güvenli sürüm
+# Flutter'ın dosyayı bulabilmesi için gerekli olan üst satır
+post_install_path = File.join(File.dirname(File.expand_path(__FILE__)), '..', '..', '..', '..', 'flutter', 'packages', 'flutter_tools', 'bin', 'xcode_backend.sh')
+
+# Bu satırı ekleyerek Flutter kütüphanelerini tanıtıyoruz
+require File.expand_path(File.join(File.dirname(__FILE__), '..', '.flutter-plugins-dependencies'))
+
+platform :ios, '13.0'
 
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
+  # Bu komutun çalışması için Flutter ayarlarının yüklü olması gerekir
   flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
 end
 

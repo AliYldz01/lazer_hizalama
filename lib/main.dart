@@ -43,7 +43,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
 
   Map<String, double> lazerSettings = {
     'exposure': -10.0, 
-    'thresh': 245.0, // En parlak beyazı yakalamak için eşik yükseltildi
+    'thresh': 240.0, 
     'zoom': 1.0,
     'focus': 1.0,
   };
@@ -95,31 +95,36 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     }
   }
 
-  // Geliştirilmiş Merkezleme (Centroid) Algoritması
+  // PYTHON MANTIĞI: Ağırlıklı Merkezleme (Weighted Centroid) Algoritması
   void analizEt(CameraImage image) {
-    double sumX = 0;
-    double sumY = 0;
-    int count = 0;
+    double weightedSumX = 0;
+    double weightedSumY = 0;
+    double totalWeight = 0;
     double currentThresh = isLazerActive ? lazerSettings['thresh']! : nozzleSettings['thresh']!;
 
     final bytes = image.planes[0].bytes;
     final int width = image.width;
     final int height = image.height;
 
-    for (int y = 0; y < height; y += 4) { // Daha hassas tarama için adım 4'e düşürüldü
+    for (int y = 0; y < height; y += 4) { 
       for (int x = 0; x < width; x += 4) {
         int index = y * width + x;
-        if (index < bytes.length && bytes[index] >= currentThresh) {
-          sumX += x;
-          sumY += y;
-          count++;
+        if (index < bytes.length) {
+          int brightness = bytes[index];
+          if (brightness >= currentThresh) {
+            // Sadece varlığına değil, parlaklık ağırlığına göre merkez hesaplar
+            double weight = (brightness - currentThresh + 1).toDouble();
+            weightedSumX += x * weight;
+            weightedSumY += y * weight;
+            totalWeight += weight;
+          }
         }
       }
     }
 
-    if (count > 2) {
+    if (totalWeight > 0) {
       setState(() {
-        lazerNoktasi = Offset(sumX / count, sumY / count);
+        lazerNoktasi = Offset(weightedSumX / totalWeight, weightedSumY / totalWeight);
       });
     } else {
       setState(() {
@@ -150,11 +155,10 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
       backgroundColor: Colors.black,
       body: Column(
         children: [
-          // YAN YANA PENCERELER (YATAY MOD)
           Expanded(
             child: Row(
               children: [
-                // SOL EKRAN: Canlı Takip + Lazer İşareti
+                // SOL EKRAN: Canlı Takip + Lazer İşareti (İyileştirme)
                 _buildWindow("CANLI: ${isLazerActive ? 'LAZER' : 'NOZZLE'}", 
                   Stack(
                     fit: StackFit.expand,
@@ -188,10 +192,10 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
             ),
           ),
           
-          // YATAY ALT KONTROL BAR- PANELI
+          // YATAY ALT KONTROL PANELİ (İyileştirme)
           Container(
             height: 65,
-            padding: const EdgeInsets.symmetric(horizontal: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             color: const Color(0xFF151515),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -202,7 +206,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
                       setState(() => isLazerActive = false);
                       applyAllSettings();
                     }),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     _modeBtn("LAZER", isLazerActive, Colors.red, () {
                       setState(() => isLazerActive = true);
                       applyAllSettings();
@@ -211,7 +215,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
                 ),
                 _actionBtn("REFERANS ÇEK", Colors.green, captureNozzle),
                 IconButton(
-                  icon: const Icon(Icons.tune, color: Colors.white, size: 28),
+                  icon: const Icon(Icons.tune, color: Colors.white, size: 30),
                   onPressed: _openSettings,
                 ),
               ],
@@ -262,7 +266,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(backgroundColor: color),
         onPressed: tap,
-        icon: const Icon(Icons.camera, size: 18),
+        icon: const Icon(Icons.camera_alt, size: 20),
         label: Text(txt, style: const TextStyle(fontWeight: FontWeight.bold)),
       ),
     );

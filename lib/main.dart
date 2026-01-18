@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Uygulamanın her zaman yatay kalmasını sağlar
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
@@ -34,6 +35,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   bool isLazerActive = false; 
   bool isAnalyzing = false;
 
+  // Ayar setleri
   Map<String, double> nozzleSettings = {
     'exposure': 0.0,
     'thresh': 100.0,
@@ -43,7 +45,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
 
   Map<String, double> lazerSettings = {
     'exposure': -10.0, 
-    'thresh': 240.0, 
+    'thresh': 245.0, 
     'zoom': 1.0,
     'focus': 1.0,
   };
@@ -57,7 +59,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   void initCamera() async {
     controller = CameraController(
       widget.cameras[0],
-      ResolutionPreset.max,
+      ResolutionPreset.max, // En yüksek çözünürlük analiz için kritik
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.bgra8888,
     );
@@ -95,7 +97,7 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     }
   }
 
-  // PYTHON MANTIĞI: Ağırlıklı Merkezleme (Weighted Centroid) Algoritması
+  // PYTHON MANTIĞI: Ağırlıklı Kütle Merkezi Algoritması
   void analizEt(CameraImage image) {
     double weightedSumX = 0;
     double weightedSumY = 0;
@@ -106,13 +108,14 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     final int width = image.width;
     final int height = image.height;
 
+    // Performans için adım 4 idealdir, Python'daki gibi kütle merkezi hesaplar
     for (int y = 0; y < height; y += 4) { 
       for (int x = 0; x < width; x += 4) {
         int index = y * width + x;
         if (index < bytes.length) {
           int brightness = bytes[index];
           if (brightness >= currentThresh) {
-            // Sadece varlığına değil, parlaklık ağırlığına göre merkez hesaplar
+            // Parlaklık farkına göre ağırlık (Python Centroid mantığı)
             double weight = (brightness - currentThresh + 1).toDouble();
             weightedSumX += x * weight;
             weightedSumY += y * weight;
@@ -153,75 +156,79 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Column(
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                // SOL EKRAN: Canlı Takip + Lazer İşareti (İyileştirme)
-                _buildWindow("CANLI: ${isLazerActive ? 'LAZER' : 'NOZZLE'}", 
-                  Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CameraPreview(controller!),
-                      if (lazerNoktasi != null)
-                        CustomPaint(
-                          painter: LazerMarkerPainter(lazerNoktasi!, controller!.value.previewSize!, Colors.redAccent),
-                        ),
-                    ],
-                  ), 
-                  Colors.blue),
-                
-                // SAĞ EKRAN: Referans + Lazer İşareti
-                _buildWindow(
-                  "ANALİZ VE REFERANS", 
-                  Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (nozzlePhoto != null) RawImage(image: nozzlePhoto, fit: BoxFit.cover) 
-                      else const Center(child: Text("Referans Bekleniyor...")),
-                      if (lazerNoktasi != null)
-                        CustomPaint(
-                          painter: LazerMarkerPainter(lazerNoktasi!, controller!.value.previewSize!, Colors.greenAccent),
-                        ),
-                    ],
-                  ), 
-                  Colors.green
-                ),
-              ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ÜST KISIM: İKİLİ PANEL (SOL CANLI - SAĞ REFERANS)
+            Expanded(
+              child: Row(
+                children: [
+                  _buildWindow("CANLI AKIŞ: ${isLazerActive ? 'LAZER' : 'NOZZLE'}", 
+                    Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CameraPreview(controller!),
+                        if (lazerNoktasi != null)
+                          CustomPaint(
+                            painter: LazerMarkerPainter(lazerNoktasi!, controller!.value.previewSize!, Colors.redAccent),
+                          ),
+                      ],
+                    ), 
+                    Colors.blue),
+                  
+                  _buildWindow(
+                    "REFERANS VE KARŞILAŞTIRMA", 
+                    Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (nozzlePhoto != null) RawImage(image: nozzlePhoto, fit: BoxFit.cover) 
+                        else const Center(child: Text("Referans Fotoğrafı Yok", style: TextStyle(color: Colors.white54))),
+                        if (lazerNoktasi != null)
+                          CustomPaint(
+                            painter: LazerMarkerPainter(lazerNoktasi!, controller!.value.previewSize!, Colors.greenAccent),
+                          ),
+                      ],
+                    ), 
+                    Colors.green
+                  ),
+                ],
+              ),
             ),
-          ),
-          
-          // YATAY ALT KONTROL PANELİ (İyileştirme)
-          Container(
-            height: 65,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            color: const Color(0xFF151515),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    _modeBtn("NOZZLE", !isLazerActive, Colors.blue, () {
-                      setState(() => isLazerActive = false);
-                      applyAllSettings();
-                    }),
-                    const SizedBox(width: 12),
-                    _modeBtn("LAZER", isLazerActive, Colors.red, () {
-                      setState(() => isLazerActive = true);
-                      applyAllSettings();
-                    }),
-                  ],
-                ),
-                _actionBtn("REFERANS ÇEK", Colors.green, captureNozzle),
-                IconButton(
-                  icon: const Icon(Icons.tune, color: Colors.white, size: 30),
-                  onPressed: _openSettings,
-                ),
-              ],
+            
+            // ALT KONTROL PANELİ
+            Container(
+              height: 70,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              color: const Color(0xFF1A1A1A),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Mod Seçimi
+                  Row(
+                    children: [
+                      _modeBtn("NOZZLE MODU", !isLazerActive, Colors.blue, () {
+                        setState(() => isLazerActive = false);
+                        applyAllSettings();
+                      }),
+                      const SizedBox(width: 12),
+                      _modeBtn("LAZER MODU", isLazerActive, Colors.redAccent, () {
+                        setState(() => isLazerActive = true);
+                        applyAllSettings();
+                      }),
+                    ],
+                  ),
+                  // Aksiyon Butonu
+                  _actionBtn("REFERANS GÖRÜNTÜ AL", Colors.green, captureNozzle),
+                  // Ayarlar
+                  IconButton(
+                    icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 32),
+                    onPressed: _openSettings,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -229,15 +236,21 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   Widget _buildWindow(String title, Widget child, Color color) {
     return Expanded(
       child: Container(
-        margin: const EdgeInsets.all(4),
-        decoration: BoxDecoration(border: Border.all(color: color.withValues(alpha: 0.4), width: 2)),
+        margin: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
+          borderRadius: BorderRadius.circular(4),
+        ),
         child: Stack(
           children: [
-            Center(child: child),
+            ClipRRect(borderRadius: BorderRadius.circular(2), child: child),
             Container(
-              padding: const EdgeInsets.all(4),
-              color: Colors.black87,
-              child: Text(title, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: const BorderRadius.only(bottomRight: Radius.circular(8)),
+              ),
+              child: Text(title, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
             ),
           ],
         ),
@@ -248,14 +261,17 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   Widget _modeBtn(String txt, bool active, Color color, VoidCallback tap) {
     return SizedBox(
       height: 45,
-      width: 110,
+      width: 120,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: active ? color : Colors.grey[850],
+          backgroundColor: active ? color : Colors.grey[900],
+          foregroundColor: Colors.white,
+          side: BorderSide(color: active ? Colors.white30 : Colors.transparent),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          elevation: active ? 8 : 0,
         ),
         onPressed: tap,
-        child: Text(txt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        child: Text(txt, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
       ),
     );
   }
@@ -264,10 +280,15 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
     return SizedBox(
       height: 45,
       child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(backgroundColor: color),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
         onPressed: tap,
-        icon: const Icon(Icons.camera_alt, size: 20),
-        label: Text(txt, style: const TextStyle(fontWeight: FontWeight.bold)),
+        icon: const Icon(Icons.camera_alt_outlined, size: 20),
+        label: Text(txt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
       ),
     );
   }
@@ -279,20 +300,27 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
         builder: (context, setDS) {
           var s = isLazerActive ? lazerSettings : nozzleSettings;
           return AlertDialog(
-            title: Text(isLazerActive ? "Lazer Ayarları" : "Nozzle Ayarları"),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _slider(setDS, "Pozlama", s['exposure']!, -10, 10, (v) => s['exposure'] = v),
-                  _slider(setDS, "Odak", s['focus']!, 0, 1, (v) => s['focus'] = v),
-                  _slider(setDS, "Eşik (Threshold)", s['thresh']!, 0, 255, (v) => s['thresh'] = v),
-                  _slider(setDS, "Zoom", s['zoom']!, 1, 10, (v) => s['zoom'] = v),
-                ],
+            backgroundColor: const Color(0xFF1A1A1A),
+            title: Text("${isLazerActive ? 'LAZER' : 'NOZZLE'} PARAMETRELERİ", style: const TextStyle(fontSize: 16)),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _slider(setDS, "POZLAMA (Exposure)", s['exposure']!, -10, 10, (v) => s['exposure'] = v),
+                    _slider(setDS, "ODAK (Focus)", s['focus']!, 0, 1, (v) => s['focus'] = v),
+                    _slider(setDS, "HASSASİYET (Threshold)", s['thresh']!, 0, 255, (v) => s['thresh'] = v),
+                    _slider(setDS, "ZOOM", s['zoom']!, 1, 10, (v) => s['zoom'] = v),
+                  ],
+                ),
               ),
             ),
             actions: [
-              TextButton(onPressed: () { applyAllSettings(); Navigator.pop(context); }, child: const Text("KAYDET VE UYGULA")),
+              TextButton(
+                onPressed: () { applyAllSettings(); Navigator.pop(context); }, 
+                child: const Text("AYARLARI UYGULA", style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold))
+              ),
             ],
           );
         },
@@ -301,12 +329,27 @@ class _MerkezlemeAsistaniAppState extends State<MerkezlemeAsistaniApp> {
   }
 
   Widget _slider(StateSetter setDS, String lbl, double val, double min, double max, Function(double) change) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text("$lbl: ${val.toStringAsFixed(1)}"),
-        Slider(value: val, min: min, max: max, onChanged: (v) => setDS(() => change(v))),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(lbl, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+              Text(val.toStringAsFixed(1), style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Slider(
+            value: val, 
+            min: min, 
+            max: max, 
+            activeColor: Colors.blueAccent,
+            onChanged: (v) => setDS(() => change(v))
+          ),
+        ],
+      ),
     );
   }
 }
@@ -319,14 +362,20 @@ class LazerMarkerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Kamera görüntüsü ve UI widget arasındaki oranlama (YATAY MOD İÇİN)
     final double scaleX = size.width / previewSize.height;
     final double scaleY = size.height / previewSize.width;
     final Offset mappedPos = Offset(pos.dx * scaleX, pos.dy * scaleY);
 
     final paint = Paint()..color = color..strokeWidth = 2..style = PaintingStyle.stroke;
+    
+    // Crosshair (Artı işareti) tasarımı
     canvas.drawCircle(mappedPos, 15, paint);
-    canvas.drawLine(Offset(mappedPos.dx - 25, mappedPos.dy), Offset(mappedPos.dx + 25, mappedPos.dy), paint);
-    canvas.drawLine(Offset(mappedPos.dx, mappedPos.dy - 25), Offset(mappedPos.dx, mappedPos.dy + 25), paint);
+    canvas.drawLine(Offset(mappedPos.dx - 30, mappedPos.dy), Offset(mappedPos.dx + 30, mappedPos.dy), paint);
+    canvas.drawLine(Offset(mappedPos.dx, mappedPos.dy - 30), Offset(mappedPos.dx, mappedPos.dy + 30), paint);
+    
+    // Merkeze nokta
+    canvas.drawCircle(mappedPos, 2, paint..style = PaintingStyle.fill);
   }
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => true;
